@@ -61,30 +61,6 @@ function doLogout() {
   window.location.href = '../index.html';
 }
 
-// ── SIDEBAR TOGGLE (mobile) ────────────────────────────────────────────────────
-function openSidebar() {
-  const sidebar  = document.getElementById('sidebar');
-  const overlay  = document.getElementById('sidebar-overlay');
-  if (!sidebar || !overlay) return;
-  sidebar.classList.add('open');
-  overlay.classList.add('open');
-  document.body.style.overflow = 'hidden'; // prevent background scroll
-}
-
-function closeSidebar() {
-  const sidebar  = document.getElementById('sidebar');
-  const overlay  = document.getElementById('sidebar-overlay');
-  if (!sidebar || !overlay) return;
-  sidebar.classList.remove('open');
-  overlay.classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-// Close sidebar on Escape key
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeSidebar();
-});
-
 // ── NAVIGATION ────────────────────────────────────────────────────────────────
 function navigate(page) {
   document.querySelectorAll('.nav-item').forEach(el => {
