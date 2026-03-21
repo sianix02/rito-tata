@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RITO&TATA Grocery Store — Login</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="auth-card">
+  <div class="card-accent"></div>
+  <div class="card-inner">
+
+    <!-- ── BRAND ── -->
+    <div class="brand">
+      <div class="brand-emblem">🛒</div>
+      <div class="brand-name">RITO&TATA<br>Grocery Store</div>
+      <div class="brand-sub">Sales &amp; Inventory System</div>
+    </div>
+
+    <!-- ══ LOGIN PANEL ══ -->
+    <div class="panel active" id="panel-login">
+      <div class="alert alert-error" id="login-error"></div>
+
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input id="login-username" class="form-control" type="text"
+               placeholder="Enter your username" autocomplete="username" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <div class="pw-wrap">
+          <input id="login-password" class="form-control" type="password"
+                 placeholder="Enter your password" autocomplete="current-password" />
+          <button class="pw-toggle" type="button" onclick="togglePw('login-password', this)">👁</button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="login-btn" onclick="doLogin()">
+        <span class="spinner" id="login-spinner"></span>
+        <span id="login-btn-text">Sign In</span>
+      </button>
+
+      <div class="auth-note" style="margin-top:14px;">
+        No account yet? <a href="#" onclick="switchTab('register')">Register here</a>
+      </div>
+    </div>
+
+    <!-- ══ REGISTER PANEL ══ -->
+    <div class="panel" id="panel-register">
+      <div class="alert alert-error" id="reg-error"></div>
+      <div class="alert alert-success" id="reg-success"></div>
+
+      <!-- Step Indicators -->
+      <div class="step-bar">
+        <div class="step active" id="step-dot-1">
+          <div class="step-circle">1</div>
+          <div class="step-label">Personal Info</div>
+        </div>
+        <div class="step-line" id="step-line"></div>
+        <div class="step" id="step-dot-2">
+          <div class="step-circle">2</div>
+          <div class="step-label">Account Setup</div>
+        </div>
+      </div>
+
+      <!-- Step 1: Personal Info -->
+      <div id="reg-step-1">
+        <div class="form-group">
+          <label class="form-label">First Name *</label>
+          <input id="reg-firstname" class="form-control" type="text" placeholder="e.g. Maria" />
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Middle Initial</label>
+            <input id="reg-mi" class="form-control" type="text" placeholder="e.g. A" maxlength="2" />
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Last Name *</label>
+            <input id="reg-lastname" class="form-control" type="text" placeholder="e.g. Santos" />
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:15px;">
+          <label class="form-label">Contact Number *</label>
+          <input id="reg-contact" class="form-control" type="tel"
+                 placeholder="e.g. 09XX-XXX-XXXX" maxlength="13" />
+        </div>
+        <button class="btn btn-primary" onclick="goToStep2()" style="margin-top:4px;">
+          Next →
+        </button>
+      </div>
+
+      <!-- Step 2: Account Setup -->
+      <div id="reg-step-2" style="display:none;">
+        <div class="form-group">
+          <label class="form-label">Username *</label>
+          <input id="reg-username" class="form-control" type="text"
+                 placeholder="Choose a username" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password *</label>
+          <div class="pw-wrap">
+            <input id="reg-password" class="form-control" type="password" placeholder="Min. 6 characters" />
+            <button class="pw-toggle" type="button" onclick="togglePw('reg-password', this)">👁</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Confirm Password *</label>
+          <div class="pw-wrap">
+            <input id="reg-confirm" class="form-control" type="password" placeholder="Re-enter password" />
+            <button class="pw-toggle" type="button" onclick="togglePw('reg-confirm', this)">👁</button>
+          </div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:4px;">
+          <button class="btn btn-secondary" onclick="goToStep1()" style="flex:1;">← Back</button>
+          <button class="btn btn-primary" id="reg-btn" onclick="doRegister()" style="flex:2;">
+            <span class="spinner" id="reg-spinner"></span>
+            <span id="reg-btn-text">Submit Registration</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="auth-note" style="margin-top:14px;">
+        Already have an account? <a href="#" onclick="switchTab('login')">Sign In</a>
+      </div>
+      <div style="text-align:center; font-size:.7rem; color:#9ca3af; margin-top:6px;">
+        Your account needs admin approval before you can sign in.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="shared-store.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

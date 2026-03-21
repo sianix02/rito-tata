@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RITO&TATA — Admin Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- Sidebar backdrop overlay (mobile) -->
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+<div class="app-wrapper">
+
+  <!-- ══ SIDEBAR ══ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-logo">🛒</div>
+      <div class="brand-text">
+        <div class="brand-name">RITO&amp;TATA<br>Grocery Store</div>
+        <div class="brand-tag">Admin Panel</div>
+      </div>
+      <!-- Mobile close button -->
+      <button class="sidebar-close" onclick="closeSidebar()" aria-label="Close menu">✕</button>
+    </div>
+
+    <div class="sidebar-user" id="sidebar-user">
+      <div class="user-avatar" id="user-avatar">A</div>
+      <div>
+        <div class="user-name" id="user-name">Admin</div>
+        <div class="user-role">👑 Administrator</div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-label">Overview</div>
+      <div class="nav-item active" data-page="dashboard" onclick="navigate('dashboard');closeSidebar()"><span class="nav-icon">🏠</span> Dashboard</div>
+
+      <div class="nav-label">Management</div>
+      <div class="nav-item" data-page="users" onclick="navigate('users');closeSidebar()"><span class="nav-icon">👥</span> User Accounts</div>
+      <div class="nav-item" data-page="pending" onclick="navigate('pending');closeSidebar()"><span class="nav-icon">⏳</span> Pending Registrations <span class="nav-badge" id="pending-badge">0</span></div>
+      <div class="nav-item" data-page="products" onclick="navigate('products');closeSidebar()"><span class="nav-icon">📦</span> Product Management</div>
+      <div class="nav-item" data-page="inventory" onclick="navigate('inventory');closeSidebar()"><span class="nav-icon">🗃️</span> Inventory <span class="nav-badge" id="low-badge">0</span></div>
+
+      <div class="nav-label">Analytics</div>
+      <div class="nav-item" data-page="sales" onclick="navigate('sales');closeSidebar()"><span class="nav-icon">💳</span> Sales Monitoring</div>
+      <div class="nav-item" data-page="reports" onclick="navigate('reports');closeSidebar()"><span class="nav-icon">📊</span> Reports</div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="nav-item" onclick="doLogout()"><span class="nav-icon">🚪</span> Log Out</div>
+    </div>
+  </aside>
+
+  <!-- ══ MAIN ══ -->
+  <div class="main-content">
+    <header class="topbar">
+      <div class="topbar-left">
+        <!-- Hamburger — visible on mobile/tablet -->
+        <button class="hamburger" id="hamburger-btn" onclick="openSidebar()" aria-label="Open menu" aria-expanded="false">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div>
+          <div class="page-title" id="page-title">Dashboard</div>
+          <div class="page-date" id="page-date"></div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-btn" id="notif-btn" onclick="navigate('inventory');closeSidebar()" title="Low Stock Alerts">
+          🔔<span class="notif-dot" id="notif-dot" style="display:none;"></span>
+        </div>
+        <div class="live-time" id="live-time"></div>
+      </div>
+    </header>
+
+    <main class="page-content" id="page-content"></main>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Scripts -->
+<script src="../shared-store.js"></script>
+<script src="script/main.js"></script>
+
+<script>
+  /* ── Sidebar toggle helpers (mobile) ── */
+  function openSidebar() {
+    document.getElementById('sidebar').classList.add('open');
+    document.getElementById('sidebar-overlay').classList.add('open');
+    document.getElementById('hamburger-btn').setAttribute('aria-expanded', 'true');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebar-overlay').classList.remove('open');
+    document.getElementById('hamburger-btn').setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+  }
+
+  /* Close sidebar on Escape key */
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeSidebar();
+  });
+
+  /* Auto-close sidebar if viewport widens back to desktop */
+  window.addEventListener('resize', function() {
+    if (window.innerWidth > 900) closeSidebar();
+  });
+</script>
+</body>
+</html>
