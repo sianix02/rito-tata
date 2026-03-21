@@ -9,7 +9,7 @@ window.STORE = window.STORE || (function () {
 
   const store = {
     users: [
-      { id:1, firstname:'Rito',  mi:'M', lastname:'Santos',    contact:'09171234567', username:'rito',  password:'admin123', role:'admin',   status:'active',  created:'2024-01-10' },
+      { id:1, firstname:'Evelyn',  mi:'A', lastname:'Dela Cruz',    contact:'09171234567', username:'rito',  password:'admin123', role:'admin',   status:'active',  created:'2024-01-10' },
       { id:2, firstname:'Tata',  mi:'L', lastname:'Reyes',     contact:'09181234567', username:'tata',  password:'admin123', role:'admin',   status:'active',  created:'2024-01-10' },
       { id:3, firstname:'Catherine', mi:'A', lastname:'Estomago',      contact:'09191234567', username:'katirin', password:'staff123', role:'cashier', status:'active',  created:'2024-02-14' },
       { id:4, firstname:'Juan',  mi:'D', lastname:'Dela Cruz', contact:'09201234567', username:'juan',  password:'staff123', role:'cashier', status:'active',  created:'2024-03-05' },
