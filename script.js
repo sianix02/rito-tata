@@ -1,6 +1,7 @@
 /**
- * script.js  (root level, used by index.html)
+ * script.js  (root level — used by index.html)
  * Login and Registration logic.
+ * Calls the PHP backend via api.js (Auth object).
  */
 
 'use strict';
@@ -67,7 +68,7 @@ function setLoading(btnId, spinnerId, textId, loading) {
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 
-function doLogin() {
+async function doLogin() {
   hideAlert('login-error');
   const username = $('login-username').value.trim();
   const password = $('login-password').value;
@@ -79,39 +80,36 @@ function doLogin() {
 
   setLoading('login-btn', 'login-spinner', 'login-btn-text', true);
 
-  setTimeout(() => {
-    setLoading('login-btn', 'login-spinner', 'login-btn-text', false);
+  try {
+    const res = await Auth.login(username, password);
 
-    const pending = (STORE.pendingUsers || []).find(u => u.username === username);
-    if (pending) {
-      showAlert('login-error', 'Your account is pending admin approval.');
+    if (!res.success) {
+      showAlert('login-error', res.message);
       return;
     }
 
-    const user = STORE.users.find(u => u.username === username && u.password === password);
-    if (!user) {
-      showAlert('login-error', 'Invalid username or password.');
-      return;
-    }
-
-    if (user.status === 'inactive') {
-      showAlert('login-error', 'Your account is deactivated. Contact admin.');
-      return;
-    }
-
+    const user = res.data;
+    // Save to sessionStorage so dashboards can show the user's name
     sessionStorage.setItem('currentUser', JSON.stringify(user));
 
+    // Redirect based on role
     if (user.role === 'admin') {
       window.location.href = 'admin/admin.html';
     } else {
       window.location.href = 'cashier/cashier.html';
     }
-  }, 600);
+
+  } catch (err) {
+    showAlert('login-error', 'Could not connect to server. Is Laragon running?');
+    console.error(err);
+  } finally {
+    setLoading('login-btn', 'login-spinner', 'login-btn-text', false);
+  }
 }
 
-// ── REGISTER ─────────────────────────────────────────────────────────────────
+// ── REGISTER ──────────────────────────────────────────────────────────────────
 
-function doRegister() {
+async function doRegister() {
   hideAlert('reg-error');
   hideAlert('reg-success');
 
@@ -127,41 +125,37 @@ function doRegister() {
     showAlert('reg-error', 'Please fill in all required fields (*).');
     return;
   }
-
   if (password.length < 6) {
     showAlert('reg-error', 'Password must be at least 6 characters.');
     return;
   }
-
   if (password !== confirm) {
     showAlert('reg-error', 'Passwords do not match.');
     return;
   }
 
-  const allUsers = [...STORE.users, ...(STORE.pendingUsers || [])];
-  if (allUsers.find(u => u.username === username)) {
-    showAlert('reg-error', 'Username already exists. Choose another.');
-    return;
-  }
-
   setLoading('reg-btn', 'reg-spinner', 'reg-btn-text', true);
 
-  setTimeout(() => {
-    setLoading('reg-btn', 'reg-spinner', 'reg-btn-text', false);
+  try {
+    const res = await Auth.register({ firstname, mi, lastname, contact, username, password });
 
-    if (!STORE.pendingUsers) STORE.pendingUsers = [];
-    STORE.pendingUsers.push({
-      id: Date.now(),
-      firstname, mi, lastname, contact, username, password,
-      role: 'cashier', status: 'pending',
-      created: new Date().toISOString().slice(0, 10)
-    });
+    if (!res.success) {
+      showAlert('reg-error', res.message);
+      return;
+    }
 
-    showAlert('reg-success', 'Registration submitted! Please wait for admin approval.', 'success');
+    showAlert('reg-success', res.message, 'success');
+    // Clear all fields and go back to step 1
     ['reg-firstname','reg-mi','reg-lastname','reg-contact',
      'reg-username','reg-password','reg-confirm'].forEach(id => $(id).value = '');
     goToStep1();
-  }, 700);
+
+  } catch (err) {
+    showAlert('reg-error', 'Could not connect to server. Is Laragon running?');
+    console.error(err);
+  } finally {
+    setLoading('reg-btn', 'reg-spinner', 'reg-btn-text', false);
+  }
 }
 
 // ── ENTER KEY ─────────────────────────────────────────────────────────────────
