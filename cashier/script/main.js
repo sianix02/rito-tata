@@ -24,16 +24,112 @@ let CART = [];
   updateClock();
   setInterval(updateClock, 1000);
 
+  // ── SSE state tracking ───────────────────────────────────────
+  window._sseState = {
+    productQtyHash: '',
+  };
+
+  // Helper: get active page
+  function activePage() {
+    return document.querySelector('.nav-item.active')?.dataset.page || '';
+  }
+
   // ── Start SSE: live product stock updates ─────────────────────
   window._cashierSSE = SSE.cashierFeed({
     products(list) {
-      // Update stock badges and gray-out rows if out of stock
+      const page    = activePage();
+      const newHash = list.map(p => `${p.id}:${p.qty}`).join(',');
+      const changed = newHash !== window._sseState.productQtyHash;
+      window._sseState.productQtyHash = newHash;
+
+      // ① Always update stock numbers + opacity on transaction page
       list.forEach(p => {
         const stockEl = document.getElementById('stock-' + p.id);
         if (stockEl) stockEl.textContent = p.qty;
         const row = document.getElementById('prod-row-' + p.id);
-        if (row) row.style.opacity = p.in_stock ? '1' : '0.45';
+        if (row) {
+          row.style.opacity       = p.in_stock ? '1' : '0.45';
+          row.style.pointerEvents = p.in_stock ? '' : 'none';
+        }
       });
+
+      // ② Warn cashier if a cart item is now out of stock
+      if (typeof CART !== 'undefined' && CART.length > 0) {
+        CART.forEach(cartItem => {
+          const live = list.find(p => p.id === cartItem.id);
+          if (live && live.qty < cartItem.qty) {
+            showToast(`⚠ "${cartItem.name}" stock reduced to ${live.qty}. Adjust cart.`, 'warning');
+          }
+          if (live && !live.in_stock) {
+            showToast(`⚠ "${cartItem.name}" is now out of stock!`, 'error');
+          }
+        });
+      }
+
+      // ③ Only run deeper updates when stock actually changed
+      if (!changed) return;
+
+      // ④ Update availability badges on View Products page
+      if (page === 'products') {
+        list.forEach(p => {
+          document.querySelectorAll('tbody tr').forEach(row => {
+            const nameCell = row.querySelector('td:first-child');
+            if (nameCell && nameCell.textContent.trim() === p.name) {
+              const badgeCell = row.querySelector('td:nth-child(4) .badge');
+              if (badgeCell) {
+                badgeCell.className   = `badge ${p.qty > 0 ? 'badge-success' : 'badge-danger'}`;
+                badgeCell.textContent = p.qty > 0 ? `✓ In Stock (${p.qty})` : 'Out of Stock';
+              }
+            }
+          });
+        });
+      }
+
+      // ⑤ Refresh My Sales stats + table when stock changes (means a sale happened)
+      if (page === 'sales') {
+        CashierTxn.list().then(res => {
+          if (!res.success) return;
+          const myTxns = res.data || [];
+          const total  = myTxns.reduce((s, t) => s + parseFloat(t.total), 0);
+          const vals   = document.querySelectorAll('.stat-value');
+          if (vals[0]) vals[0].textContent = myTxns.length;
+          if (vals[1]) vals[1].textContent = formatPeso(total);
+          if (vals[2]) vals[2].textContent = formatPeso(myTxns.length ? total / myTxns.length : 0);
+          const tbody = document.querySelector('.card table tbody');
+          if (tbody) {
+            tbody.innerHTML = myTxns.map(t => `
+              <tr>
+                <td class="font-mono text-green fw-600">${t.txn_code}</td>
+                <td class="fw-600">${formatPeso(t.total)}</td>
+                <td class="text-sm">${t.txn_date}</td>
+                <td class="text-sm text-muted">${t.txn_time}</td>
+                <td><button class="btn btn-secondary btn-sm" onclick="viewTxn(${t.id})">View</button></td>
+              </tr>`).join('');
+          }
+        }).catch(() => {});
+      }
+
+      // ⑥ Refresh Dashboard stats when stock changes
+      if (page === 'dashboard') {
+        CashierDashboard.get().then(res => {
+          if (!res.success) return;
+          const d    = res.data;
+          const vals = document.querySelectorAll('.stat-value');
+          if (vals[0]) vals[0].textContent = d.total_transactions;
+          if (vals[1]) vals[1].textContent = formatPeso(d.total_revenue);
+          if (vals[2]) vals[2].textContent = d.today_count;
+          const tbody = document.querySelector('.card table tbody');
+          if (tbody && d.recent?.length) {
+            tbody.innerHTML = d.recent.map(t => `
+              <tr>
+                <td class="font-mono text-green fw-600">${t.txn_code}</td>
+                <td class="fw-600">${formatPeso(t.total)}</td>
+                <td class="text-sm">${t.txn_date}</td>
+                <td class="text-sm text-muted">${t.txn_time}</td>
+              </tr>`).join('');
+          }
+        }).catch(() => {});
+      }
     },
   });
 
@@ -326,6 +422,9 @@ async function transaction(el) {
     CART = [];
     openModal('receipt-modal');
     showToast(`${txn.txn_code} completed successfully!`);
+
+    // Reset the SSE product qty hash so next SSE push forces a full product refresh
+    if (window._sseState) window._sseState.productQtyHash = '';
   };
 }
 
@@ -366,6 +465,9 @@ async function sales(el) {
   const res    = await CashierTxn.list();
   const myTxns = res.data || [];
   const total  = myTxns.reduce((s,t) => s + parseFloat(t.total), 0);
+
+  // Mark this page as "sales" so SSE can refresh it
+  el.dataset.livePage = 'sales';
 
   el.innerHTML = `
   <div class="section-header">

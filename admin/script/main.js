@@ -25,25 +25,221 @@ let CURRENT_USER = null;
   updateClock();
   setInterval(updateClock, 1000);
 
-  // ── Start SSE stream for live badge/KPI updates ───────────────
+  // ── SSE state: track previous values to detect real changes ─────
+  window._sseState = {
+    todayTxnCount:  null,
+    lowCount:       null,
+    criticalCount:  null,
+    pendingCount:   null,
+  };
+
+  // Helper: get which page is currently active
+  function activePage() {
+    return document.querySelector('.nav-item.active')?.dataset.page || '';
+  }
+
+  // Helper: refresh the current page (re-runs its load function)
+  function refreshPage(delay = 600) {
+    const page = activePage();
+    if (page) setTimeout(() => navigate(page), delay);
+  }
+
+  // ── Start SSE stream ──────────────────────────────────────────
   window._adminSSE = SSE.adminFeed({
+
+    // ── stats: today's revenue + transaction count ───────────────
+    // Fires every 3s — covers: Dashboard, Sales Monitoring
     stats(data) {
-      // Update revenue KPI live without reloading the page
+      const prev = window._sseState;
+      const page = activePage();
+
+      // Always update KPI cards if they exist (dashboard)
       const revenueEl = document.getElementById('kpi-revenue');
       const txnEl     = document.getElementById('kpi-txn-count');
       if (revenueEl) revenueEl.textContent = formatPeso(data.today_revenue);
       if (txnEl)     txnEl.textContent     = data.today_transactions;
+
+      // Detect new transaction
+      const newTxn = prev.todayTxnCount !== null &&
+                     data.today_transactions > prev.todayTxnCount;
+
+      if (newTxn) {
+        showToast('🛒 New sale recorded!', 'success');
+
+        // Pages that need refreshing when a new sale happens
+        const salesPages = ['dashboard', 'sales', 'inventory', 'products', 'reports'];
+        if (salesPages.includes(page)) refreshPage(700);
+
+        // Also update the sales stat cards if on sales page
+        const todayRevEl = document.querySelector('.stat-card.c-green .stat-value');
+        if (todayRevEl && page === 'sales') todayRevEl.textContent = formatPeso(data.today_revenue);
+      }
+
+      prev.todayTxnCount = data.today_transactions;
     },
+
+    // ── stock: low/critical stock items ─────────────────────────
+    // Fires every 3s — covers: Dashboard, Inventory, Products
     stock(data) {
+      const prev = window._sseState;
+      const page = activePage();
+
+      // Always update sidebar badge + bell dot
       const lb = document.getElementById('low-badge');
       const nd = document.getElementById('notif-dot');
       if (lb) { lb.textContent = data.low_count; lb.style.display = data.low_count ? '' : 'none'; }
       if (nd) nd.style.display = data.critical_count ? '' : 'none';
+
+      // Detect stock level change
+      const stockChanged = prev.lowCount !== null && (
+        data.low_count      !== prev.lowCount ||
+        data.critical_count !== prev.criticalCount
+      );
+
+      if (stockChanged) {
+        // Alert for new critical items
+        if (data.critical_count > (prev.criticalCount || 0)) {
+          showToast('🔴 Critical stock alert! Item needs restocking.', 'error');
+        } else if (data.low_count > (prev.lowCount || 0)) {
+          showToast('⚠ A product is running low on stock.', 'warning');
+        }
+
+        // Refresh pages that show stock data
+        const stockPages = ['dashboard', 'inventory', 'products'];
+        if (stockPages.includes(page)) refreshPage(500);
+      }
+
+      // Live update traffic light counts on dashboard (no full reload needed)
+      const tlRed = document.querySelector('.db-tl-card.tl-red .db-tl-count');
+      const tlAmb = document.querySelector('.db-tl-card.tl-amber .db-tl-count');
+      if (tlRed) tlRed.textContent = `${data.critical_count} item${data.critical_count !== 1 ? 's' : ''}`;
+      if (tlAmb) {
+        const amberOnly = (data.low_items || []).filter(p => p.qty > Math.floor(p.low_stock / 2));
+        tlAmb.textContent = `${amberOnly.length} item${amberOnly.length !== 1 ? 's' : ''}`;
+      }
+
+      // Live update inventory progress bars if on inventory page
+      if (page === 'inventory' && !stockChanged) {
+        data.low_items?.forEach(p => {
+          const qtyEl = document.querySelector(`tr td[data-id="${p.id}"] .inv-qty`);
+          if (qtyEl) qtyEl.textContent = p.qty;
+        });
+      }
+
+      prev.lowCount      = data.low_count;
+      prev.criticalCount = data.critical_count;
     },
+
+    // ── pending: registration count ──────────────────────────────
+    // Fires every 3s — covers: Pending Registrations page
     pending(data) {
+      const prev = window._sseState;
+      const page = activePage();
+
+      // Always update sidebar badge
       const pb = document.getElementById('pending-badge');
       if (pb) { pb.textContent = data.count; pb.style.display = data.count ? '' : 'none'; }
+
+      // New registration came in
+      if (prev.pendingCount !== null && data.count > prev.pendingCount) {
+        showToast('⏳ New registration request received!', 'warning');
+        if (page === 'pending') refreshPage(500);
+      }
+
+      prev.pendingCount = data.count;
     },
+
+    // ── product_qty: ALL products changed (any qty change) ──────
+    // Fires only when a product qty actually changes — covers Product Management
+    product_qty(products) {
+      const page = activePage();
+
+      // ① If on Product Management — update stock column live in the table
+      if (page === 'products') {
+        products.forEach(p => {
+          // Find the row for this product and update stock cell
+          document.querySelectorAll('#prod-table tbody tr').forEach(row => {
+            const nameCell = row.querySelector('td:first-child');
+            if (nameCell && nameCell.textContent.trim() === p.name) {
+              const stockCell  = row.querySelector('td:nth-child(4)');
+              const statusCell = row.querySelector('td:nth-child(6)');
+              if (stockCell)  stockCell.textContent = p.qty;
+              if (statusCell) statusCell.innerHTML  = p.is_low
+                ? `<span class="badge badge-danger">⚠ Low</span>`
+                : `<span class="badge badge-success">✓ OK</span>`;
+            }
+          });
+        });
+        // Also update the product count text
+        const countEl = document.getElementById('prod-count');
+        if (countEl) countEl.textContent = `${products.length} products`;
+      }
+
+      // ② If on Inventory — update qty, progress bars and status live
+      if (page === 'inventory') {
+        products.forEach(p => {
+          document.querySelectorAll('#page-content tbody tr').forEach(row => {
+            const nameCell = row.querySelector('td:first-child');
+            if (nameCell && nameCell.textContent.trim() === p.name) {
+              const qtyCell    = row.querySelector('td:nth-child(3)');
+              const statusCell = row.querySelector('td:nth-child(6)');
+              if (qtyCell) {
+                qtyCell.textContent = p.qty;
+                qtyCell.className   = `font-mono fw-600 ${p.is_low ? 'text-danger' : ''}`;
+              }
+              if (statusCell) statusCell.innerHTML = p.is_low
+                ? `<span class="badge badge-danger">⚠ Low</span>`
+                : `<span class="badge badge-success">✓ OK</span>`;
+              // Update progress bar
+              const bar = row.querySelector('.progress-fill');
+              if (bar) {
+                const max = Math.max(p.low_stock * 3, p.qty, 1);
+                const pct = Math.min(100, Math.round((p.qty / max) * 100));
+                bar.style.width = pct + '%';
+                bar.className   = `progress-fill ${p.qty <= p.low_stock / 2 ? 'low' : p.is_low ? 'med' : ''}`;
+              }
+            }
+          });
+        });
+      }
+    },
+    // Fires every 3s — updates dashboard feed + sales table live
+    transactions(data) {
+      const page = activePage();
+      const txns = data.transactions || [];
+
+      // ① Update recent transactions table on dashboard (bottom row)
+      const dashTbody = document.querySelector('.db-bottom-row table tbody');
+      if (dashTbody && txns.length) {
+        dashTbody.innerHTML = txns.map(t => `
+          <tr>
+            <td class="font-mono text-green fw-600">${t.txn_code}</td>
+            <td>${t.cashier_name}</td>
+            <td class="fw-600">${formatPeso(t.total)}</td>
+            <td class="text-muted text-sm">${t.txn_time}</td>
+          </tr>`).join('');
+      }
+
+      // ② Update activity feed on dashboard
+      const feedEl = document.querySelector('.db-chart-card .card-body[style*="padding:4px"]');
+      if (feedEl && txns.length) {
+        const feedHtml = txns.slice(0, 4).map(t => `
+          <div class="db-feed-item">
+            <div class="db-feed-dot sale"></div>
+            <div class="db-feed-text">Sale ${t.txn_code} — ${formatPeso(t.total)} by ${t.cashier_name}</div>
+            <div class="db-feed-time">${t.txn_time}</div>
+          </div>`).join('');
+        // Only update feed if dashboard is active (avoid overwriting other page content)
+        if (page === 'dashboard') feedEl.innerHTML = feedHtml;
+      }
+
+      // ③ Update sales monitoring transaction count badge
+      const txnCountEl = document.querySelector('.stat-card.c-teal .stat-value');
+      if (txnCountEl && page === 'sales') {
+        txnCountEl.textContent = txns.length;
+      }
+    },
+
   });
 
   navigate('dashboard');

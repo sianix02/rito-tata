@@ -191,50 +191,38 @@ const CashierAccount = {
 };
 
 // ════════════════════════════════════════════════════════════════
-// SSE HELPERS  — real-time live updates via Node.js SSE Server
-// The Node.js server (sse-server/server.js) runs on port 3001.
-// Start it with:  node sse-server/server.js
+// SSE HELPERS — connects to Node.js SSE server on port 3001
+// EventSource does NOT send cookies, so no session issues.
 // ════════════════════════════════════════════════════════════════
 
-// Node.js SSE server base URL — edit port if you changed it in .env
 const SSE_SERVER = 'http://localhost:3001';
 
 const SSE = {
-    /**
-     * Open the Admin SSE stream from the Node.js server.
-     * Events: connected | stats | stock | pending | transactions
-     */
+
     adminFeed(handlers = {}) {
         const es = new EventSource(`${SSE_SERVER}/sse/admin`);
 
-        es.addEventListener('connected', e => {
-            console.log('[SSE Admin]', JSON.parse(e.data).message);
-        });
+        es.addEventListener('connected',    e => console.log('[SSE Admin] Connected ✅'));
         es.addEventListener('stats',        e => handlers.stats        && handlers.stats(JSON.parse(e.data)));
         es.addEventListener('stock',        e => handlers.stock        && handlers.stock(JSON.parse(e.data)));
         es.addEventListener('pending',      e => handlers.pending      && handlers.pending(JSON.parse(e.data)));
         es.addEventListener('transactions', e => handlers.transactions && handlers.transactions(JSON.parse(e.data)));
+        es.addEventListener('product_qty',  e => handlers.product_qty  && handlers.product_qty(JSON.parse(e.data)));
 
         es.onerror = () => {
-            console.warn('[SSE Admin] Connection lost — is the Node.js server running? (node sse-server/server.js)');
+            console.warn('[SSE Admin] ⚠ Connection lost — make sure node server.js is running in sse-server/');
         };
         return es;
     },
 
-    /**
-     * Open the Cashier SSE stream from the Node.js server.
-     * Events: connected | products
-     */
     cashierFeed(handlers = {}) {
         const es = new EventSource(`${SSE_SERVER}/sse/cashier`);
 
-        es.addEventListener('connected', e => {
-            console.log('[SSE Cashier]', JSON.parse(e.data).message);
-        });
-        es.addEventListener('products', e => handlers.products && handlers.products(JSON.parse(e.data)));
+        es.addEventListener('connected', e => console.log('[SSE Cashier] Connected ✅'));
+        es.addEventListener('products',  e => handlers.products && handlers.products(JSON.parse(e.data)));
 
         es.onerror = () => {
-            console.warn('[SSE Cashier] Connection lost — is the Node.js server running? (node sse-server/server.js)');
+            console.warn('[SSE Cashier] ⚠ Connection lost — make sure node server.js is running in sse-server/');
         };
         return es;
     },
