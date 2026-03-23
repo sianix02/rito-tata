@@ -8,7 +8,7 @@ echo   RITO^&TATA Grocery Store — Auto Launcher
 echo  ==========================================
 echo.
 
-:: ── STEP 1: Start Laragon GUI (no services yet) ───────────────────
+:: ── STEP 1: Start Laragon GUI ─────────────────────────────────────
 echo  [1/4] Starting Laragon...
 start "" "C:\laragon\laragon.exe"
 timeout /t 2 /nobreak >nul
@@ -46,20 +46,19 @@ if errorlevel 1 (
 )
 echo  Apache ready!
 
-:: ── STEP 4: Start Node.js SSE Server ─────────────────────────────
-echo  [4/4] Starting SSE Server...
-start "RITO-TATA SSE Server" cmd /k "cd /d C:\laragon\www\rito-tata\sse-server && node server.js"
-timeout /t 2 /nobreak >nul
-
 :: ── Open site in browser ──────────────────────────────────────────
 start "" "http://rito-tata.test"
 
+:: ── STEP 4: SSE Server runs IN this window (no new terminal) ─────
+echo  [4/4] Starting SSE Server...
 echo.
 echo  ==========================================
-echo   All done! This window will close in 3s
+echo   All services running!
 echo   Site:   http://rito-tata.test
 echo   SSE:    http://localhost:3001/health
+echo   Close this window to stop SSE Server.
 echo  ==========================================
 echo.
-timeout /t 3 /nobreak >nul
-exit
+title RITO^&TATA — SSE Server
+cd /d C:\laragon\www\rito-tata\sse-server
+node server.js
