@@ -26,7 +26,10 @@ html { font-size: 15px; }
 body {
   font-family: 'DM Sans', sans-serif;
   min-height: 100vh;
-  background: linear-gradient(135deg, var(--g950) 0%, var(--g900) 45%, var(--g800) 100%);
+  /* background: linear-gradient(135deg, var(--g950) 0%, var(--g900) 45%, var(--g800) 100%); */
+  background-image: url(image.png);
+  background-size: cover;
+  background-position: center;
   display: flex;
   align-items: center;
   justify-content: center;

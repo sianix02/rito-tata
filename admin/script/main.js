@@ -48,7 +48,6 @@ let CURRENT_USER = null;
   window._adminSSE = SSE.adminFeed({
 
     // ── stats: today's revenue + transaction count ───────────────
-    // Fires every 3s — covers: Dashboard, Sales Monitoring
     stats(data) {
       const prev = window._sseState;
       const page = activePage();
@@ -67,7 +66,7 @@ let CURRENT_USER = null;
         showToast('🛒 New sale recorded!', 'success');
 
         // Pages that need refreshing when a new sale happens
-        const salesPages = ['dashboard', 'sales', 'inventory', 'products', 'reports'];
+        const salesPages = ['dashboard', 'sales', 'products', 'reports'];
         if (salesPages.includes(page)) refreshPage(700);
 
         // Also update the sales stat cards if on sales page
@@ -79,7 +78,6 @@ let CURRENT_USER = null;
     },
 
     // ── stock: low/critical stock items ─────────────────────────
-    // Fires every 3s — covers: Dashboard, Inventory, Products
     stock(data) {
       const prev = window._sseState;
       const page = activePage();
@@ -105,25 +103,8 @@ let CURRENT_USER = null;
         }
 
         // Refresh pages that show stock data
-        const stockPages = ['dashboard', 'inventory', 'products'];
+        const stockPages = ['dashboard', 'products'];
         if (stockPages.includes(page)) refreshPage(500);
-      }
-
-      // Live update traffic light counts on dashboard (no full reload needed)
-      const tlRed = document.querySelector('.db-tl-card.tl-red .db-tl-count');
-      const tlAmb = document.querySelector('.db-tl-card.tl-amber .db-tl-count');
-      if (tlRed) tlRed.textContent = `${data.critical_count} item${data.critical_count !== 1 ? 's' : ''}`;
-      if (tlAmb) {
-        const amberOnly = (data.low_items || []).filter(p => p.qty > Math.floor(p.low_stock / 2));
-        tlAmb.textContent = `${amberOnly.length} item${amberOnly.length !== 1 ? 's' : ''}`;
-      }
-
-      // Live update inventory progress bars if on inventory page
-      if (page === 'inventory' && !stockChanged) {
-        data.low_items?.forEach(p => {
-          const qtyEl = document.querySelector(`tr td[data-id="${p.id}"] .inv-qty`);
-          if (qtyEl) qtyEl.textContent = p.qty;
-        });
       }
 
       prev.lowCount      = data.low_count;
@@ -131,7 +112,6 @@ let CURRENT_USER = null;
     },
 
     // ── pending: registration count ──────────────────────────────
-    // Fires every 3s — covers: Pending Registrations page
     pending(data) {
       const prev = window._sseState;
       const page = activePage();
@@ -150,60 +130,34 @@ let CURRENT_USER = null;
     },
 
     // ── product_qty: ALL products changed (any qty change) ──────
-    // Fires only when a product qty actually changes — covers Product Management
+    // Fires only when a product qty actually changes
     product_qty(products) {
       const page = activePage();
 
-      // ① If on Product Management — update stock column live in the table
+      // ① If on Product Management — update stock column live using data-product-id
       if (page === 'products') {
         products.forEach(p => {
-          // Find the row for this product and update stock cell
-          document.querySelectorAll('#prod-table tbody tr').forEach(row => {
-            const nameCell = row.querySelector('td:first-child');
-            if (nameCell && nameCell.textContent.trim() === p.name) {
-              const stockCell  = row.querySelector('td:nth-child(4)');
-              const statusCell = row.querySelector('td:nth-child(6)');
-              if (stockCell)  stockCell.textContent = p.qty;
-              if (statusCell) statusCell.innerHTML  = p.is_low
-                ? `<span class="badge badge-danger">⚠ Low</span>`
-                : `<span class="badge badge-success">✓ OK</span>`;
-            }
-          });
+          // Each <tr> has data-product-id set in renderTable()
+          const row = document.querySelector(`#prod-table tbody tr[data-product-id="${p.id}"]`);
+          if (!row) return;
+
+          const stockCell  = row.querySelector('td:nth-child(4)');  // Stock qty
+          const statusCell = row.querySelector('td:nth-child(6)');  // Status badge
+
+          if (stockCell)  stockCell.textContent = p.qty;
+          if (statusCell) statusCell.innerHTML  = p.is_low
+            ? `<span class="badge badge-danger">⚠ Low</span>`
+            : `<span class="badge badge-success">✓ OK</span>`;
         });
-        // Also update the product count text
+
+        // Update the product count text
         const countEl = document.getElementById('prod-count');
         if (countEl) countEl.textContent = `${products.length} products`;
       }
 
-      // ② If on Inventory — update qty, progress bars and status live
-      if (page === 'inventory') {
-        products.forEach(p => {
-          document.querySelectorAll('#page-content tbody tr').forEach(row => {
-            const nameCell = row.querySelector('td:first-child');
-            if (nameCell && nameCell.textContent.trim() === p.name) {
-              const qtyCell    = row.querySelector('td:nth-child(3)');
-              const statusCell = row.querySelector('td:nth-child(6)');
-              if (qtyCell) {
-                qtyCell.textContent = p.qty;
-                qtyCell.className   = `font-mono fw-600 ${p.is_low ? 'text-danger' : ''}`;
-              }
-              if (statusCell) statusCell.innerHTML = p.is_low
-                ? `<span class="badge badge-danger">⚠ Low</span>`
-                : `<span class="badge badge-success">✓ OK</span>`;
-              // Update progress bar
-              const bar = row.querySelector('.progress-fill');
-              if (bar) {
-                const max = Math.max(p.low_stock * 3, p.qty, 1);
-                const pct = Math.min(100, Math.round((p.qty / max) * 100));
-                bar.style.width = pct + '%';
-                bar.className   = `progress-fill ${p.qty <= p.low_stock / 2 ? 'low' : p.is_low ? 'med' : ''}`;
-              }
-            }
-          });
-        });
-      }
     },
-    // Fires every 3s — updates dashboard feed + sales table live
+
+    // ── transactions: updates dashboard feed + sales table live ──
     transactions(data) {
       const page = activePage();
       const txns = data.transactions || [];
@@ -222,15 +176,14 @@ let CURRENT_USER = null;
 
       // ② Update activity feed on dashboard
       const feedEl = document.querySelector('.db-chart-card .card-body[style*="padding:4px"]');
-      if (feedEl && txns.length) {
+      if (feedEl && txns.length && page === 'dashboard') {
         const feedHtml = txns.slice(0, 4).map(t => `
           <div class="db-feed-item">
             <div class="db-feed-dot sale"></div>
             <div class="db-feed-text">Sale ${t.txn_code} — ${formatPeso(t.total)} by ${t.cashier_name}</div>
             <div class="db-feed-time">${t.txn_time}</div>
           </div>`).join('');
-        // Only update feed if dashboard is active (avoid overwriting other page content)
-        if (page === 'dashboard') feedEl.innerHTML = feedHtml;
+        feedEl.innerHTML = feedHtml;
       }
 
       // ③ Update sales monitoring transaction count badge
@@ -282,7 +235,7 @@ function navigate(page) {
   });
   const titles = {
     dashboard: 'Dashboard', users: 'User Accounts', pending: 'Pending Registrations',
-    products: 'Product Management', inventory: 'Inventory Monitoring',
+    products: 'Product Management',
     sales: 'Sales Monitoring', reports: 'Reports'
   };
   $('page-title').textContent = titles[page] || page;
@@ -292,7 +245,7 @@ function navigate(page) {
 
   const pages = {
     dashboard, users: userManagement, pending: pendingRegistrations,
-    products: productManagement, inventory, sales: salesMonitoring, reports
+    products: productManagement, sales: salesMonitoring, reports
   };
   if (pages[page]) pages[page](content);
 }
@@ -310,25 +263,11 @@ async function dashboard(el) {
   const d          = res.data;
   const todayRev   = d.today_revenue;
   const todayCount = d.today_transactions;
-  const redItems   = d.critical_items   || [];
-  const amberItems = d.low_stock_items  || [];
-  // "amber" = low stock but NOT critical (qty > low_stock/2)
-  const amberOnly  = amberItems.filter(p => p.qty > Math.floor(p.low_stock / 2));
-  const freshCats  = ['produce','fresh','dairy','meat','bakery','fruits','vegetables'];
-  const freshItems = (d.low_stock_items || []).filter(p =>
-    freshCats.some(c => (p.category || '').toLowerCase().includes(c)) && p.qty > 0
-  );
   const pending    = d.pending_count;
 
-  // Revenue delta vs yesterday
   const yestRev  = d.yesterday_revenue;
   const revDelta = yestRev ? ((todayRev - yestRev) / yestRev * 100).toFixed(1) : null;
 
-  // Hourly chart data  (d.hourly_sales is { "8": 123.50, "9": 0, … })
-  const lineLabels = Object.keys(d.hourly_sales).map(h => h + ':00');
-  const lineData   = Object.values(d.hourly_sales).map(v => +parseFloat(v).toFixed(2));
-
-  // Category bar chart
   const barLabels  = d.sales_by_category.map(c => c.category || 'Other');
   const barData    = d.sales_by_category.map(c => +parseFloat(c.revenue).toFixed(2));
   const BAR_COLORS = ['#16a34a','#22c55e','#0d9488','#ca8a04','#0369a1','#e11d48','#7c3aed','#db2777'];
@@ -359,13 +298,11 @@ async function dashboard(el) {
     </div>
 
     <div class="db-kpi animate-in delay-2">
-      <div class="db-kpi-accent" style="background:${redItems.length ? 'var(--danger)' : 'var(--g500)'};"></div>
-      <div class="db-kpi-icon">${redItems.length ? '🚨' : '📦'}</div>
+      <div class="db-kpi-accent" style="background:var(--g500);"></div>
+      <div class="db-kpi-icon">📦</div>
       <div class="db-kpi-val">${d.total_products}</div>
       <div class="db-kpi-label">Total Products</div>
-      <div class="db-kpi-delta ${redItems.length ? 'down' : d.low_stock_count ? 'warn' : 'up'}">
-        ${redItems.length ? `🔴 ${redItems.length} critical` : d.low_stock_count ? `⚠ ${d.low_stock_count} low stock` : '✓ All stocked'}
-      </div>
+      <div class="db-kpi-delta up">✓ In catalogue</div>
     </div>
 
     <div class="db-kpi animate-in delay-3">
@@ -385,12 +322,12 @@ async function dashboard(el) {
     <div class="db-chart-card animate-in delay-1">
       <div class="db-chart-head">
         <div>
-          <div class="db-chart-title">Hourly Sales Trend</div>
-          <div class="db-chart-sub">Today's revenue by store hour · synced from POS</div>
+          <div class="db-chart-title">Sales Summary</div>
+          <div class="db-chart-sub">Revenue distribution by category · all-time</div>
         </div>
-        <div class="db-live-badge"><div class="db-live-dot"></div> LIVE</div>
+        <span style="font-size:.68rem;color:var(--gray-400);">${barLabels.length} categories</span>
       </div>
-      <div class="db-chart-body tall"><canvas id="db-line-chart"></canvas></div>
+      <div class="db-chart-body tall" style="display:flex;align-items:center;justify-content:center;"><canvas id="db-pie-chart"></canvas></div>
     </div>
     <div class="db-chart-card animate-in delay-2">
       <div class="db-chart-head">
@@ -404,67 +341,6 @@ async function dashboard(el) {
     </div>
   </div>
 
-  <!-- ══ TRAFFIC-LIGHT ALERTS ══════════════════════════════════════════════════ -->
-  <div class="db-tl-grid animate-in delay-2">
-    <div class="db-tl-card tl-red">
-      <div class="db-tl-head">
-        <div class="db-tl-light"></div>
-        <div class="db-tl-heading">Critical Stock</div>
-        <div class="db-tl-count">${redItems.length} item${redItems.length!==1?'s':''}</div>
-      </div>
-      <div class="db-tl-body">
-        ${redItems.length === 0
-          ? '<div class="db-tl-empty">No critical items right now.</div>'
-          : redItems.slice(0,5).map(p=>`
-            <div class="db-tl-item">
-              <div class="db-tl-item-name" title="${p.name}">${p.name}</div>
-              <div class="db-tl-item-qty">${p.qty} left</div>
-            </div>`).join('')}
-        ${redItems.length > 5 ? `<div class="db-tl-empty">+${redItems.length-5} more items</div>` : ''}
-        <button class="db-tl-action" onclick="navigate('inventory')">
-          ${redItems.length ? '➕ Restock Now' : '✓ View Inventory'}
-        </button>
-      </div>
-    </div>
-
-    <div class="db-tl-card tl-amber">
-      <div class="db-tl-head">
-        <div class="db-tl-light"></div>
-        <div class="db-tl-heading">Low Stock Warning</div>
-        <div class="db-tl-count">${amberOnly.length} item${amberOnly.length!==1?'s':''}</div>
-      </div>
-      <div class="db-tl-body">
-        ${amberOnly.length === 0
-          ? '<div class="db-tl-empty">No low-stock warnings.</div>'
-          : amberOnly.slice(0,5).map(p=>`
-            <div class="db-tl-item">
-              <div class="db-tl-item-name" title="${p.name}">${p.name}</div>
-              <div class="db-tl-item-qty">${p.qty}/${p.low_stock}</div>
-            </div>`).join('')}
-        ${amberOnly.length > 5 ? `<div class="db-tl-empty">+${amberOnly.length-5} more</div>` : ''}
-        <button class="db-tl-action" onclick="navigate('inventory')">View All Stock</button>
-      </div>
-    </div>
-
-    <div class="db-tl-card tl-green">
-      <div class="db-tl-head">
-        <div class="db-tl-light"></div>
-        <div class="db-tl-heading">Fresh Goods Watch</div>
-        <div class="db-tl-count">${freshItems.length} item${freshItems.length!==1?'s':''}</div>
-      </div>
-      <div class="db-tl-body">
-        ${freshItems.length === 0
-          ? '<div class="db-tl-empty">No fresh goods tracked.</div>'
-          : freshItems.slice(0,5).map(p=>`
-            <div class="db-tl-item">
-              <div class="db-tl-item-name" title="${p.name}">${p.name}</div>
-              <div class="db-tl-item-qty">${p.qty} units</div>
-            </div>`).join('')}
-        ${freshItems.length > 5 ? `<div class="db-tl-empty">+${freshItems.length-5} more</div>` : ''}
-        <button class="db-tl-action" onclick="navigate('products')">Check Products</button>
-      </div>
-    </div>
-  </div>
 
   <!-- ══ BOTTOM ROW ════════════════════════════════════════════════════════════ -->
   <div class="db-bottom-row">
@@ -515,31 +391,42 @@ async function dashboard(el) {
 
   // ── Draw Charts ───────────────────────────────────────────────────────────
   function drawDashboardCharts() {
-    const lineCtx = document.getElementById('db-line-chart');
-    if (lineCtx) {
-      if (window._dbLineChart) window._dbLineChart.destroy();
-      const grad = lineCtx.getContext('2d').createLinearGradient(0,0,0,200);
-      grad.addColorStop(0,'rgba(34,197,94,.20)');
-      grad.addColorStop(1,'rgba(34,197,94,.00)');
-      window._dbLineChart = new Chart(lineCtx, {
-        type: 'line',
+    const pieCtx = document.getElementById('db-pie-chart');
+    if (pieCtx) {
+      if (window._dbPieChart) window._dbPieChart.destroy();
+      window._dbPieChart = new Chart(pieCtx, {
+        type: 'doughnut',
         data: {
-          labels: lineLabels,
-          datasets: [{ label:'Revenue (₱)', data:lineData, fill:true, backgroundColor:grad,
-            borderColor:'#16a34a', borderWidth:2.2, pointBackgroundColor:'#16a34a',
-            pointBorderColor:'#fff', pointBorderWidth:2, pointRadius:4, pointHoverRadius:7, tension:0.4 }]
+          labels: barLabels,
+          datasets: [{
+            data: barData,
+            backgroundColor: BAR_COLORS.slice(0, barLabels.length).map(c => c + 'cc'),
+            borderColor: BAR_COLORS.slice(0, barLabels.length),
+            borderWidth: 2,
+            hoverOffset: 10
+          }]
         },
         options: {
-          responsive:true, maintainAspectRatio:false,
-          interaction:{mode:'index',intersect:false},
-          plugins:{ legend:{display:false},
-            tooltip:{ backgroundColor:'#052e16',titleColor:'#86efac',bodyColor:'#fff',
-              padding:10,cornerRadius:8, callbacks:{label:ctx=>' '+formatPeso(ctx.parsed.y)} } },
-          scales:{
-            x:{ grid:{display:false}, ticks:{color:'#9ca3af',font:{size:10},maxRotation:0} },
-            y:{ grid:{color:'#f0fdf4',lineWidth:1},
-              ticks:{color:'#9ca3af',font:{size:10},callback:v=>v>=1000?'₱'+(v/1000).toFixed(1)+'k':'₱'+v},
-              beginAtZero:true }
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '58%',
+          plugins: {
+            legend: {
+              display: true,
+              position: 'right',
+              labels: { color: '#6b7280', font: { size: 11 }, padding: 12, boxWidth: 12, usePointStyle: true }
+            },
+            tooltip: {
+              backgroundColor: '#052e16', titleColor: '#86efac', bodyColor: '#fff',
+              padding: 10, cornerRadius: 8,
+              callbacks: {
+                label: ctx => {
+                  const total = ctx.dataset.data.reduce((a, b) => a + b, 0) || 1;
+                  const pct = Math.round(ctx.parsed / total * 100);
+                  return ` ${formatPeso(ctx.parsed)}  (${pct}%)`;
+                }
+              }
+            }
           }
         }
       });
@@ -676,7 +563,6 @@ async function userManagement(el) {
     const res = await AdminUsers.edit(id, { firstname, mi, lastname, contact });
     if (!res.success) { showToast(res.message,'error'); return; }
 
-    // Update local list
     const idx = users.findIndex(u => u.id === id);
     if (idx !== -1) users[idx] = { ...users[idx], firstname, mi, lastname, contact };
     showToast('Staff info updated successfully!');
@@ -751,13 +637,14 @@ async function productManagement(el) {
   const res = await Products.adminList();
   let allProducts = res.data || [];
 
+  // ── renderTable now stamps data-product-id on every <tr> ──────────────────
   const renderTable = (list) => `
   <div class="table-wrap">
     <table>
       <thead><tr><th>Product Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Threshold</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>
         ${list.map(p=>`
-          <tr>
+          <tr data-product-id="${p.id}">
             <td class="fw-600">${p.name}</td>
             <td><span class="badge badge-green">${p.category}</span></td>
             <td class="fw-600 font-mono">${formatPeso(p.price)}</td>
@@ -888,7 +775,6 @@ async function productManagement(el) {
     if (!res.success) { showToast(res.message,'error'); return; }
     showToast(res.message);
     closeModal('product-modal');
-    // Reload list
     const fresh = await Products.adminList();
     allProducts = fresh.data || [];
     filterProducts();
@@ -924,108 +810,6 @@ async function productManagement(el) {
     const fresh = await Products.adminList();
     allProducts = fresh.data || [];
     filterProducts();
-  };
-}
-
-// ── INVENTORY ─────────────────────────────────────────────────────────────────
-async function inventory(el) {
-  el.innerHTML = '<div class="empty-state"><p>Loading inventory…</p></div>';
-  const res = await Products.adminList();
-  const allProducts = res.data || [];
-  const lowItems    = allProducts.filter(p => p.is_low);
-
-  el.innerHTML = `
-  <div class="section-header">
-    <div><div class="section-title">Inventory Monitoring</div><div class="section-desc">Real-time stock levels for all products</div></div>
-    ${lowItems.length ? `<span class="badge badge-danger" style="padding:6px 14px;">⚠ ${lowItems.length} Low Stock</span>` : ''}
-  </div>
-
-  ${lowItems.length ? `
-  <div class="card mb-18 animate-in" style="border-left:4px solid var(--danger);">
-    <div class="card-header">
-      <div class="card-title" style="color:var(--danger);">⚠ Low Stock — Restock Required</div>
-      <div class="card-sub">Click "+ Add Stock" to restock directly</div>
-    </div>
-    <div class="card-body" style="padding-top:10px;">
-      ${lowItems.map(p=>`
-        <div class="stock-add-card">
-          <div><div class="product-name">${p.name}</div><div class="product-meta">${p.category} &nbsp;·&nbsp; Threshold: ${p.low_stock} units</div></div>
-          <div class="flex items-center gap-8">
-            <span class="badge badge-danger fw-700">${p.qty} left</span>
-            <button class="btn btn-success btn-sm" onclick="quickRestock(${p.id})">➕ Add Stock</button>
-          </div>
-        </div>`).join('')}
-    </div>
-  </div>` : ''}
-
-  <div class="card animate-in delay-1">
-    <div class="card-header"><div class="card-title">All Products — Stock Overview</div></div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Product Name</th><th>Category</th><th>In Stock</th><th>Threshold</th><th>Stock Level</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody>
-          ${allProducts.map(p=>{
-            const max = Math.max(p.low_stock*3, p.qty, 1);
-            const pct = Math.min(100, Math.round((p.qty/max)*100));
-            const cls = p.qty <= p.low_stock/2 ? 'low' : p.is_low ? 'med' : '';
-            return `<tr>
-              <td class="fw-600">${p.name}</td>
-              <td><span class="badge badge-green">${p.category}</span></td>
-              <td class="font-mono fw-600 ${p.is_low?'text-danger':''}">${p.qty}</td>
-              <td class="font-mono text-muted">${p.low_stock}</td>
-              <td style="min-width:120px;">
-                <div class="flex items-center gap-8">
-                  <div class="progress-bar" style="flex:1;"><div class="progress-fill ${cls}" style="width:${pct}%"></div></div>
-                  <span class="text-xs">${pct}%</span>
-                </div>
-              </td>
-              <td>${p.is_low?`<span class="badge badge-danger">⚠ Low</span>`:`<span class="badge badge-success">✓ OK</span>`}</td>
-              <td><button class="btn btn-success btn-sm" onclick="quickRestock(${p.id})">➕ Add Stock</button></td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Quick Restock Modal -->
-  <div class="modal-overlay" id="quick-stock-modal">
-    <div class="modal">
-      <div class="modal-header"><div class="modal-title">➕ Add Stock</div><button class="modal-close" onclick="closeModal('quick-stock-modal')">✕</button></div>
-      <div class="modal-body">
-        <input type="hidden" id="qs-product-id" />
-        <div style="background:var(--g50);border-radius:var(--radius-md);padding:14px;margin-bottom:16px;">
-          <div class="fw-600" id="qs-product-name">Product</div>
-          <div class="text-sm text-muted mt-4">Current stock: <span class="fw-600 font-mono" id="qs-current-qty">0</span> units</div>
-        </div>
-        <div class="form-group"><label class="form-label">Quantity to Add *</label><input id="qs-add-qty" class="form-control" type="number" min="1" placeholder="Enter quantity" /></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeModal('quick-stock-modal')">Cancel</button>
-        <button class="btn btn-success" onclick="confirmQuickRestock()">✓ Add Stock</button>
-      </div>
-    </div>
-  </div>`;
-
-  window.quickRestock = (id) => {
-    const p = allProducts.find(x => x.id === id);
-    if (!p) return;
-    $('qs-product-id').value = id;
-    $('qs-product-name').textContent = p.name;
-    $('qs-current-qty').textContent  = p.qty;
-    $('qs-add-qty').value = '';
-    openModal('quick-stock-modal');
-  };
-
-  window.confirmQuickRestock = async () => {
-    const id  = parseInt($('qs-product-id').value);
-    const qty = parseInt($('qs-add-qty').value);
-    if (!qty || qty < 1) { showToast('Please enter a valid quantity.','error'); return; }
-    const res = await Products.restock(id, qty);
-    if (!res.success) { showToast(res.message,'error'); return; }
-    showToast(res.message);
-    closeModal('quick-stock-modal');
-    inventory(el);  // refresh the page
   };
 }
 
@@ -1240,7 +1024,6 @@ function reports(el) {
       </div>
     </div>`;
 
-    // Draw bar chart if multi-day
     requestAnimationFrame(() => {
       const barCtx = document.getElementById('rpt-bar-canvas');
       if (!barCtx || !window.Chart) return;
@@ -1276,7 +1059,6 @@ function reports(el) {
     showToast('CSV exported!');
   };
 
-  // Auto-generate on load
   const autoRender = () => generateReport();
   if (window.Chart) autoRender();
   else {
